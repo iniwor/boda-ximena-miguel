@@ -669,7 +669,7 @@ h2.title{
       <svg class="ic-sound" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9 h4 l5 -4 v14 l-5 -4 H4z" fill="currentColor" stroke="none"/><path d="M17 8.5 a5 5 0 0 1 0 7"/></svg>
       <svg class="ic-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9 h4 l5 -4 v14 l-5 -4 H4z" fill="currentColor" stroke="none"/><path d="M17 9 l5 6 M22 9 l-5 6"/></svg>
     </button>
-    <audio id="audio" loop preload="none"></audio>
+    <audio id="audio" loop preload="auto" playsinline></audio>
   </div>
 
 </div>
@@ -1103,16 +1103,49 @@ const mpMute = document.getElementById('mpMute');
 let fuente = 0;
 audio.volume = 0.4;               // 40% del volumen
 audio.src = FUENTES[fuente];
+audio.preload = 'auto';
 
 audio.addEventListener('error', () => {
   fuente++;
   if (fuente < FUENTES.length) {
     audio.src = FUENTES[fuente];
+audio.preload = 'auto';
     audio.load();
   } else {
     miniPlayer.classList.add('off');   // sin música: los controles se ocultan
   }
 });
+
+/* Arranque automático: se intenta al cargar y, si el navegador lo bloquea,
+   la música comienza sola con el primer gesto del invitado (toque o scroll).
+   No se muestra ningún aviso: el arranque es silencioso. */
+let musicaIniciada = false;
+
+function iniciarMusica() {
+  if (musicaIniciada) return;
+  audio.volume = 0.4;
+  const p = audio.play();
+  if (p && p.then) {
+    p.then(() => { musicaIniciada = true; quitarGestos(); }).catch(() => {});
+  }
+}
+
+const gestos = ['pointerdown', 'touchstart', 'keydown', 'scroll', 'wheel'];
+function alGesto(e) {
+  if (e.target && e.target.closest && e.target.closest('.mini-player')) return;
+  iniciarMusica();
+}
+function quitarGestos() {
+  gestos.forEach(g => document.removeEventListener(g, alGesto));
+}
+gestos.forEach(g => document.addEventListener(g, alGesto, { passive: true }));
+
+// Primer intento en cuanto el audio tenga datos suficientes
+audio.addEventListener('canplay', iniciarMusica, { once: true });
+audio.load();
+
+// Si el invitado pausa, ya no se vuelve a arrancar solo
+audio.addEventListener('pause', () => { musicaIniciada = true; quitarGestos(); });
 
 mpPlay.addEventListener('click', () => {
   if (audio.paused) {
