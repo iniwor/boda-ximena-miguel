@@ -756,7 +756,7 @@ document.getElementById('copyTarjeta').addEventListener('click', () => copiarDat
    2. Pega aquí la URL de tu Web App (termina en /exec).
    Si se deja vacío, el sitio funciona en modo demostración.
    ============================================================ */
-const API_URL = 'https://script.google.com/macros/s/AKfycbxCoYa_o1QWIWjxzVYgCEQhQFjTTvlUG2PpGErXdnjQZ4hpcaUDqOCdjXCX8lQw5r1QBg/exec';
+const API_URL = '';
 
 const inviteCode = new URLSearchParams(location.search).get('inv');
 let guest = null;
@@ -1109,28 +1109,27 @@ audio.addEventListener('error', () => {
   fuente++;
   if (fuente < FUENTES.length) {
     audio.src = FUENTES[fuente];
-audio.preload = 'auto';
     audio.load();
   } else {
     miniPlayer.classList.add('off');   // sin música: los controles se ocultan
   }
 });
 
-/* Arranque automático: se intenta al cargar y, si el navegador lo bloquea,
-   la música comienza sola con el primer gesto del invitado (toque o scroll).
-   No se muestra ningún aviso: el arranque es silencioso. */
-let musicaIniciada = false;
+/* Arranque automático: se intenta al cargar y, si el navegador lo bloquea
+   (caso normal en celulares), la música comienza con el primer gesto del
+   invitado: toque, deslizamiento o scroll. El arranque es silencioso. */
+let haSonado = false;      // solo true cuando el audio realmente suena
+let pausaManual = false;   // true si el invitado pausó a propósito
 
 function iniciarMusica() {
-  if (musicaIniciada) return;
-  audio.volume = 0.4;
+  if (haSonado || pausaManual) return;
+  audio.volume = 0.4;   // iOS ignora esta línea: ahí manda el volumen físico
   const p = audio.play();
-  if (p && p.then) {
-    p.then(() => { musicaIniciada = true; quitarGestos(); }).catch(() => {});
-  }
+  if (p && p.catch) p.catch(() => {});   // bloqueado: se espera otro gesto
 }
 
-const gestos = ['pointerdown', 'touchstart', 'keydown', 'scroll', 'wheel'];
+// Gestos que pueden desbloquear el audio en celulares
+const gestos = ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown', 'scroll'];
 function alGesto(e) {
   if (e.target && e.target.closest && e.target.closest('.mini-player')) return;
   iniciarMusica();
@@ -1138,14 +1137,23 @@ function alGesto(e) {
 function quitarGestos() {
   gestos.forEach(g => document.removeEventListener(g, alGesto));
 }
+// Los gestos siguen activos hasta que la música suene de verdad,
+// así se reintenta con cada toque en vez de rendirse al primero
 gestos.forEach(g => document.addEventListener(g, alGesto, { passive: true }));
 
-// Primer intento en cuanto el audio tenga datos suficientes
-audio.addEventListener('canplay', iniciarMusica, { once: true });
-audio.load();
+audio.addEventListener('playing', () => {
+  haSonado = true;
+  quitarGestos();
+});
 
-// Si el invitado pausa, ya no se vuelve a arrancar solo
-audio.addEventListener('pause', () => { musicaIniciada = true; quitarGestos(); });
+// Solo se considera pausa del invitado si la música ya estaba sonando.
+// (Al cambiar de fuente el navegador dispara 'pause' por su cuenta.)
+audio.addEventListener('pause', () => {
+  if (haSonado) pausaManual = true;
+});
+
+// Intento inicial en escritorio, donde sí suele permitirse
+audio.addEventListener('canplay', iniciarMusica, { once: true });
 
 mpPlay.addEventListener('click', () => {
   if (audio.paused) {
